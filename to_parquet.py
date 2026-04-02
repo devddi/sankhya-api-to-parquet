@@ -104,16 +104,29 @@ class SankhyaToParquetPipeline:
 
     def _standardize_dates(self, df: pd.DataFrame):
         """Padroniza colunas de data conhecidas para o formato datetime do Pandas."""
-        colunas_data = ["DATA", "DHALTER", "DTALTER", "DTNEG", "DATA_NEG"]
         for col in df.columns:
-            if col.upper() in colunas_data or "DATA" in col.upper() or "DT" in col.upper():
-                try:
-                    df[col] = pd.to_datetime(df[col], format='%d%m%Y %H:%M:%S', errors='coerce')
-                    mask = df[col].isna()
-                    if mask.any():
-                        df.loc[mask, col] = pd.to_datetime(df.loc[mask, col], dayfirst=True, errors='coerce')
-                except Exception as e:
-                    pass
+            c_upper = col.upper()
+            # Detecta se é uma coluna de data (DT..., DATA... ou contém DATA)
+            if c_upper.startswith("DT") or c_upper.startswith("DATA") or "DATA" in c_upper:
+                # Tenta converter do formato DDMMYYYY HH:MM:SS
+                temp_date = pd.to_datetime(df[col], format='%d%m%Y %H:%M:%S', errors='coerce')
+                
+                # Se falhou e for numérico, tenta unit='ms' (comum na API Sankhya)
+                if temp_date.isna().all() and pd.api.types.is_numeric_dtype(df[col]):
+                    temp_date = pd.to_datetime(df[col], unit='ms', errors='coerce')
+                
+                # Fallback genérico
+                if temp_date.isna().all():
+                    temp_date = pd.to_datetime(df[col], errors='coerce')
+                
+                df[col] = temp_date
+
+    def _format_dates_to_string(self, df: pd.DataFrame):
+        """Converte todas as colunas datetime para String no formato DDMMYYYY HH:MM:SS antes de salvar."""
+        for col in df.columns:
+            if pd.api.types.is_datetime64_any_dtype(df[col]):
+                # Se for NaT, fica vazio, senão formata. fillna("") garante que não salve NaT como texto
+                df[col] = df[col].dt.strftime('%d%m%Y %H:%M:%S').replace("NaT", "")
 
     def get_max_value_s3(self, s3_key: str, col_controle: str) -> Any:
         """Obtém o valor máximo de uma coluna de controle em um arquivo Parquet no S3."""
@@ -121,7 +134,9 @@ class SankhyaToParquetPipeline:
             response = self.s3_client.get_object(Bucket=BUCKET_NAME, Key=s3_key)
             df_existente = pd.read_parquet(io.BytesIO(response['Body'].read()), columns=[col_controle])
             if not df_existente.empty:
-                validos = df_existente[col_controle].dropna()
+                # Como salvamos como String, precisamos converter de volta para data para pegar o MAX real
+                val_date = pd.to_datetime(df_existente[col_controle], format='%d%m%Y %H:%M:%S', errors='coerce')
+                validos = val_date.dropna()
                 return validos.max() if not validos.empty else None
         except ClientError:
             return None
@@ -145,15 +160,13 @@ class SankhyaToParquetPipeline:
         tipo_carga = "FULL"
         if col_controle and max_val is not None and not pd.isna(max_val):
             tipo_carga = "INCREMENTAL"
-            if hasattr(max_val, 'strftime') or "DATA" in col_controle.upper() or "DT" in col_controle.upper():
-                ts_str = max_val.strftime('%d/%m/%Y %H:%M:%S') if hasattr(max_val, 'strftime') else str(max_val)
-                filtro = f"{col_controle} > TO_DATE('{ts_str}', 'DD/MM/YYYY HH24:MI:SS')"
-            else:
-                filtro = f"{col_controle} > {max_val}"
+            # O Sankhya/Oracle espera TO_DATE para filtros precisos
+            ts_str = max_val.strftime('%d/%m/%Y %H:%M:%S')
+            filtro = f"{col_controle} > TO_DATE('{ts_str}', 'DD/MM/YYYY HH24:MI:SS')"
                 
             conector = "AND" if "WHERE" in sql_base.upper() else "WHERE"
             sql_query = f"SELECT * FROM ({sql_base}) {conector} {filtro}"
-            log_step("⚖️", f"Modo Incremental detectado. Buscando dados desde: {max_val}")
+            log_step("⚖️", f"Modo Incremental detectado. Buscando desde: {ts_str}")
         else:
             log_step("📤", "Modo Carga Total (Full Load).")
 
@@ -179,7 +192,7 @@ class SankhyaToParquetPipeline:
                 break
             
             offset += PAGE_SIZE
-            time.sleep(3) # Pausa pequena entre páginas para não estressar a API
+            time.sleep(3)
 
         if not frames:
             log_step("😴", "Nenhum dado novo encontrado.")
@@ -194,6 +207,7 @@ class SankhyaToParquetPipeline:
             try:
                 resp = self.s3_client.get_object(Bucket=BUCKET_NAME, Key=s3_key)
                 df_antigo = pd.read_parquet(io.BytesIO(resp['Body'].read()))
+                # Importante converter o antigo de volta para data antes do merge para evitar NaTs
                 self._standardize_dates(df_antigo)
                 
                 df_total = pd.concat([df_antigo, df_novo], ignore_index=True)
@@ -204,13 +218,16 @@ class SankhyaToParquetPipeline:
         else:
             df_total = df_novo
 
+        # --- FORMATAÇÃO FINAL PARA EXPORTAÇÃO (PADRÃO PRINT) ---
+        self._format_dates_to_string(df_total)
+
         # Escrita no S3
         buffer = io.BytesIO()
         df_total.to_parquet(buffer, engine="pyarrow", index=False)
         buffer.seek(0)
         self.s3_client.put_object(Bucket=BUCKET_NAME, Key=s3_key, Body=buffer.getvalue())
         
-        log_step("✅", f"Sucesso! {linhas_novas} novos registros adicionados. ({len(df_total)} linhas no total).")
+        log_step("✅", f"Sucesso! {linhas_novas} novos registros adicionados. ({len(df_total)} linhas totais).")
         self.results.append({"tabela": s3_key, "status": "Sucesso", "linhas": len(df_total), "tipo": tipo_carga})
 
     def print_summary(self, duration):
