@@ -11,13 +11,19 @@ from typing import List, Dict, Optional, Any
 from botocore.config import Config
 from botocore.exceptions import ClientError
 
-# --- CONFIGURAÇÃO DE LOGGING ---
+# --- CONFIGURAÇÃO DE LOGGING DIDÁTICO ---
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
+    format='%(message)s',
     handlers=[logging.StreamHandler()]
 )
 logger = logging.getLogger(__name__)
+
+def log_header(msg: str):
+    logger.info(f"\n{'='*60}\n🚀 {msg.upper()}\n{'='*60}")
+
+def log_step(emoji: str, msg: str):
+    logger.info(f"{emoji} {msg}")
 
 # --- CONFIGURAÇÕES DE AMBIENTE ---
 SANKHYA_URL = os.getenv("SANKHYA_API_URL", "https://api-sankhya.pluralmed.com.br/api/query")
@@ -44,6 +50,7 @@ class SankhyaToParquetPipeline:
             "Authorization": f"Bearer {SANKHYA_TOKEN}",
             "Content-Type": "application/json"
         }
+        self.results = []
 
     def _paged_sql(self, base_sql: str, offset: int, limit: int) -> str:
         """Gera o SQL paginado para o Sankhya/SQL Server."""
@@ -72,7 +79,6 @@ class SankhyaToParquetPipeline:
                         return pd.DataFrame()
                     
                     colunas = [c["name"] for c in fields]
-                    # Tenta encontrar a chave correta que contém os registros
                     linhas = next((rb[k] for k in ["records", "rows", "result", "data"] if k in rb), None)
                     
                     if linhas is None:
@@ -82,10 +88,17 @@ class SankhyaToParquetPipeline:
                     self._standardize_dates(df)
                     return df
                 
-                logger.warning(f"  ⚠️ Tentativa {tentativa+1} falhou (Sankhya Status {response.status_code}).")
+                # Mensagens amigáveis para erros comuns (como 502)
+                error_msg = f"Status {response.status_code}"
+                if response.status_code == 502:
+                    error_msg = "Instabilidade no Servidor (Erro 502 - Bad Gateway)"
+                elif response.status_code == 401:
+                    error_msg = "Token Expirado ou Inválido (Erro 401)"
+                
+                log_step("⚠️", f"{error_msg}. Tentativa {tentativa+1}/{MAX_RETRIES} - Aguardando 30s...")
                 time.sleep(30)
             except Exception as e:
-                logger.error(f"  ⚠️ Erro na tentativa {tentativa+1}: {str(e)}")
+                log_step("⚠️", f"Falha na conexão: {str(e)}. Tentativa {tentativa+1}/{MAX_RETRIES} - Aguardando 30s...")
                 time.sleep(30)
         return None
 
@@ -100,7 +113,7 @@ class SankhyaToParquetPipeline:
                     if mask.any():
                         df.loc[mask, col] = pd.to_datetime(df.loc[mask, col], dayfirst=True, errors='coerce')
                 except Exception as e:
-                    logger.debug(f"Falha ao converter coluna {col}: {e}")
+                    pass
 
     def get_max_value_s3(self, s3_key: str, col_controle: str) -> Any:
         """Obtém o valor máximo de uma coluna de controle em um arquivo Parquet no S3."""
@@ -113,24 +126,25 @@ class SankhyaToParquetPipeline:
         except ClientError:
             return None
         except Exception as e:
-            logger.warning(f"Erro ao ler arquivo existente {s3_key}: {e}")
             return None
         return None
 
-    def process_task(self, tarefa: Dict[str, Any]) -> str:
+    def process_task(self, tarefa: Dict[str, Any]):
         """Processa uma única tarefa de extração (Full ou Incremental)."""
         sql_base = tarefa["sql"]
         s3_key = tarefa["path"]
         col_controle = tarefa.get("col_controle")
         pk = tarefa.get("pk")
         
-        logger.info(f"Iniciando processamento: {s3_key}")
+        logger.info(f"\n🔹 Processando Tabela: {s3_key}")
         
         max_val = self.get_max_value_s3(s3_key, col_controle) if col_controle else None
         sql_query = sql_base
         
         # Lógica Incremental
+        tipo_carga = "FULL"
         if col_controle and max_val is not None and not pd.isna(max_val):
+            tipo_carga = "INCREMENTAL"
             if hasattr(max_val, 'strftime') or "DATA" in col_controle.upper() or "DT" in col_controle.upper():
                 ts_str = max_val.strftime('%d/%m/%Y %H:%M:%S') if hasattr(max_val, 'strftime') else str(max_val)
                 filtro = f"{col_controle} > TO_DATE('{ts_str}', 'DD/MM/YYYY HH24:MI:SS')"
@@ -139,9 +153,9 @@ class SankhyaToParquetPipeline:
                 
             conector = "AND" if "WHERE" in sql_base.upper() else "WHERE"
             sql_query = f"SELECT * FROM ({sql_base}) {conector} {filtro}"
-            logger.info(f"  -> [INCREMENTAL] Desde: {max_val}")
+            log_step("⚖️", f"Modo Incremental detectado. Buscando dados desde: {max_val}")
         else:
-            logger.info(f"  -> [FULL LOAD]")
+            log_step("📤", "Modo Carga Total (Full Load).")
 
         frames = []
         offset = 0
@@ -150,26 +164,30 @@ class SankhyaToParquetPipeline:
             df_pagina = self._fetch_page(sql_paginado)
             
             if df_pagina is None:
-                raise Exception(f"Falha ao buscar dados na página {offset//PAGE_SIZE}")
+                self.results.append({"tabela": s3_key, "status": "Erro", "linhas": 0, "tipo": tipo_carga})
+                raise Exception(f"Falha crítica na API após {MAX_RETRIES} tentativas.")
             
             if df_pagina.empty:
                 break
             
             frames.append(df_pagina)
-            logger.info(f"     Página {len(frames)}: {len(df_pagina)} linhas baixadas.")
+            log_step("🔄", f"Página {len(frames)} processada... (+{len(df_pagina)} linhas)")
             
             if len(df_pagina) < PAGE_SIZE or len(frames) >= MAX_PAGES:
                 if len(frames) >= MAX_PAGES:
-                    logger.warning(f"  ⚠️ Limite de {MAX_PAGES} páginas atingido. Interrompendo para segurança.")
+                    log_step("⚠️", f"Limite de {MAX_PAGES} páginas atingido.")
                 break
             
             offset += PAGE_SIZE
-            time.sleep(SLEEP_BETWEEN)
+            time.sleep(3) # Pausa pequena entre páginas para não estressar a API
 
         if not frames:
-            return f"Finalizado: {s3_key} sem novos dados."
+            log_step("😴", "Nenhum dado novo encontrado.")
+            self.results.append({"tabela": s3_key, "status": "Sem Dados", "linhas": 0, "tipo": tipo_carga})
+            return
 
         df_novo = pd.concat(frames, ignore_index=True)
+        linhas_novas = len(df_novo)
 
         # Merge de dados (se incremental)
         if col_controle:
@@ -192,7 +210,17 @@ class SankhyaToParquetPipeline:
         buffer.seek(0)
         self.s3_client.put_object(Bucket=BUCKET_NAME, Key=s3_key, Body=buffer.getvalue())
         
-        return f"Sucesso: {s3_key} ({len(df_total)} linhas totais no arquivo final)."
+        log_step("✅", f"Sucesso! {linhas_novas} novos registros adicionados. ({len(df_total)} linhas no total).")
+        self.results.append({"tabela": s3_key, "status": "Sucesso", "linhas": len(df_total), "tipo": tipo_carga})
+
+    def print_summary(self, duration):
+        log_header("Resumo Final da Execução")
+        logger.info(f"{'TABELA':<40} | {'TIPO':<11} | {'STATUS':<10} | {'LINHAS':<10}")
+        logger.info("-" * 80)
+        for r in self.results:
+            logger.info(f"{r['tabela']:<40} | {r['tipo']:<11} | {r['status']:<10} | {r['linhas']:<10}")
+        logger.info("-" * 80)
+        logger.info(f"Duração Total: {duration}")
 
 # --- CONFIGURAÇÃO DAS TAREFAS ---
 TAREFAS = [
@@ -238,20 +266,19 @@ TAREFAS = [
 
 if __name__ == "__main__":
     start_time = datetime.now()
-    logger.info(f"Pipeline Iniciado: {start_time.strftime('%Y-%m-%d %H:%M:%S')}")
+    log_header(f"Iniciando Pipeline Sankhya -> S3 Parquet")
     
     if not SANKHYA_TOKEN:
-        logger.error("ERRO: SANKHYA_TOKEN não configurado nas variáveis de ambiente.")
+        logger.error("❌ ERRO: SANKHYA_TOKEN não configurado nas variáveis de ambiente.")
         exit(1)
         
     pipeline = SankhyaToParquetPipeline()
     
     for t in TAREFAS:
         try:
-            resultado = pipeline.process_task(t)
-            logger.info(resultado)
+            pipeline.process_task(t)
         except Exception as e:
-            logger.error(f"FALHA CRÍTICA na tarefa {t['path']}: {str(e)}")
+            logger.error(f"❌ FALHA CRÍTICA na tarefa {t['path']}: {str(e)}")
             
     end_time = datetime.now()
-    logger.info(f"Pipeline Finalizado. Duração: {end_time - start_time}")
+    pipeline.print_summary(end_time - start_time)
