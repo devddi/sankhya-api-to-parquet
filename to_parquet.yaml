@@ -54,7 +54,8 @@ tasks:
       subprocess.check_call([sys.executable, SCRIPT_NAME])
 
 triggers:
-  - id: schedule
-    type: io.kestra.plugin.core.trigger.Schedule
-    cron: "0 2 * * *" # Executa diariamente às 02:00 AM
+  - id: webhook_trigger
+    type: io.kestra.plugin.core.trigger.Webhook
+    # Chave para autenticação do webhook. Você pode alterá-la para algo mais complexo.
+    key: "SANKHYA_EXTRACT_KEY"
 
