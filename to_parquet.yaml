@@ -10,11 +10,11 @@ tasks:
       - pip install -r requirements.txt
     env:
       SANKHYA_API_URL: "{{ kv('SANKHYA_API_URL') }}"
-      SANKHYA_TOKEN: "{{ secret('SANKHYA_TOKEN') }}"
-      AWS_ACCESS_KEY_ID: "{{ secret('AWS_ACCESS_KEY_ID') }}"
-      AWS_SECRET_ACCESS_KEY: "{{ secret('AWS_SECRET_ACCESS_KEY') }}"
-      AWS_BUCKET_NAME: "pluralmed-data-platform"
-      AWS_REGION: "us-east-2"
+      SANKHYA_TOKEN: "{{ kv('SANKHYA_TOKEN') }}"
+      AWS_ACCESS_KEY_ID: "{{ kv('AWS_ACCESS_KEY_ID') }}"
+      AWS_SECRET_ACCESS_KEY: "{{ kv('AWS_SECRET_ACCESS_KEY') }}"
+      AWS_BUCKET_NAME: "{{ kv('AWS_BUCKET_NAME') }}"
+      AWS_REGION: "{{ kv('AWS_REGION') }}"
       # Configurações opcionais
       PAGE_SIZE: "2000"
       SLEEP_BETWEEN: "1"
