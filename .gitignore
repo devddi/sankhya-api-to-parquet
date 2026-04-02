@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.env
+
+# Jupyter
+.ipynb_checkpoints
+
+# IDEs
+.vscode/
+.idea/
+
+# Data (se houver localmente)
+*.parquet
+*.csv
+*.json
+!to_parquet.json # a menos que queira ignorar

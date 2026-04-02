@@ -1,0 +1,59 @@
+id: sankhya_to_parquet
+namespace: pluralmed.data
+description: Pipeline para extração de dados do Sankhya e conversão para Parquet no S3
+
+tasks:
+  - id: extract_and_convert
+    type: io.kestra.plugin.scripts.python.Script
+    containerImage: ghcr.io/kestra-io/pydata:latest
+    beforeCommands:
+      - pip install -r requirements.txt
+    env:
+      SANKHYA_API_URL: "{{ kv('SANKHYA_API_URL') }}"
+      SANKHYA_TOKEN: "{{ secret('SANKHYA_TOKEN') }}"
+      AWS_ACCESS_KEY_ID: "{{ secret('AWS_ACCESS_KEY_ID') }}"
+      AWS_SECRET_ACCESS_KEY: "{{ secret('AWS_SECRET_ACCESS_KEY') }}"
+      AWS_BUCKET_NAME: "pluralmed-data-platform"
+      AWS_REGION: "us-east-2"
+      # Configurações opcionais
+      PAGE_SIZE: "2000"
+      SLEEP_BETWEEN: "1"
+      MAX_RETRIES: "5"
+    script: |
+      import os
+      import sys
+      import subprocess
+      import urllib.request
+
+      # --- CONFIGURAÇÃO DO REPOSITÓRIO ---
+      # Substitua pela URL da 'raw' do seu arquivo no novo repositório
+      GITHUB_REPO_URL = "https://raw.githubusercontent.com/devddi/sankhya-api-to-parquet/main"
+      SCRIPT_NAME = "to_parquet.py"
+      REQS_NAME = "requirements.txt"
+
+      def download_file(filename):
+          url = f"{GITHUB_REPO_URL}/{filename}"
+          print(f"Baixando {filename} de: {url}")
+          try:
+              urllib.request.urlretrieve(url, filename)
+              print(f"✅ {filename} baixado com sucesso!")
+          except Exception as e:
+              print(f"❌ Erro ao baixar {filename}: {e}")
+              sys.exit(1)
+
+      # Baixa os arquivos necessários
+      download_file(REQS_NAME)
+      download_file(SCRIPT_NAME)
+
+      # Instala dependências (via beforeCommands ou explicitamente aqui)
+      # subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", REQS_NAME])
+      
+      # Executa o script principal
+      print(f"Iniciando execução do {SCRIPT_NAME}...")
+      subprocess.check_call([sys.executable, SCRIPT_NAME])
+
+triggers:
+  - id: schedule
+    type: io.kestra.plugin.core.trigger.Schedule
+    cron: "0 2 * * *" # Executa diariamente às 02:00 AM
+
