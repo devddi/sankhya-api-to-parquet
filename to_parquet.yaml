@@ -7,7 +7,7 @@ tasks:
     type: io.kestra.plugin.scripts.python.Script
     containerImage: ghcr.io/kestra-io/pydata:latest
     beforeCommands:
-      - pip install -r requirements.txt
+      - echo "Iniciando ambiente Python..."
     env:
       SANKHYA_API_URL: "{{ kv('SANKHYA_API_URL') }}"
       SANKHYA_TOKEN: "{{ kv('SANKHYA_TOKEN') }}"
@@ -17,8 +17,8 @@ tasks:
       AWS_REGION: "{{ kv('AWS_REGION') }}"
       # Configurações opcionais
       PAGE_SIZE: "2000"
-      SLEEP_BETWEEN: "1"
-      MAX_RETRIES: "5"
+      SLEEP_BETWEEN: "30"
+      MAX_RETRIES: "20"
     script: |
       import os
       import sys
@@ -45,8 +45,9 @@ tasks:
       download_file(REQS_NAME)
       download_file(SCRIPT_NAME)
 
-      # Instala dependências (via beforeCommands ou explicitamente aqui)
-      # subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", REQS_NAME])
+      # Instala dependências agora que o arquivo existe
+      print("Instalando dependências do requirements.txt...")
+      subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", REQS_NAME])
       
       # Executa o script principal
       print(f"Iniciando execução do {SCRIPT_NAME}...")

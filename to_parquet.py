@@ -27,8 +27,9 @@ AWS_REGION = os.getenv("AWS_REGION", "us-east-2")
 
 # Configurações de Execução
 PAGE_SIZE = int(os.getenv("PAGE_SIZE", "2000"))
-SLEEP_BETWEEN = int(os.getenv("SLEEP_BETWEEN", "1"))
-MAX_RETRIES = int(os.getenv("MAX_RETRIES", "5"))
+MAX_PAGES = int(os.getenv("MAX_PAGES", "5000"))
+SLEEP_BETWEEN = int(os.getenv("SLEEP_BETWEEN", "30"))
+MAX_RETRIES = int(os.getenv("MAX_RETRIES", "20"))
 
 class SankhyaToParquetPipeline:
     def __init__(self):
@@ -81,11 +82,11 @@ class SankhyaToParquetPipeline:
                     self._standardize_dates(df)
                     return df
                 
-                logger.warning(f"Tentativa {tentativa+1} falhou (Sankhya Status {response.status_code}).")
-                time.sleep(5)
+                logger.warning(f"  ⚠️ Tentativa {tentativa+1} falhou (Sankhya Status {response.status_code}).")
+                time.sleep(30)
             except Exception as e:
-                logger.error(f"Erro na tentativa {tentativa+1}: {str(e)}")
-                time.sleep(5)
+                logger.error(f"  ⚠️ Erro na tentativa {tentativa+1}: {str(e)}")
+                time.sleep(30)
         return None
 
     def _standardize_dates(self, df: pd.DataFrame):
@@ -157,7 +158,9 @@ class SankhyaToParquetPipeline:
             frames.append(df_pagina)
             logger.info(f"     Página {len(frames)}: {len(df_pagina)} linhas baixadas.")
             
-            if len(df_pagina) < PAGE_SIZE:
+            if len(df_pagina) < PAGE_SIZE or len(frames) >= MAX_PAGES:
+                if len(frames) >= MAX_PAGES:
+                    logger.warning(f"  ⚠️ Limite de {MAX_PAGES} páginas atingido. Interrompendo para segurança.")
                 break
             
             offset += PAGE_SIZE
