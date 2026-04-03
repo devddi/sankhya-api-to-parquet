@@ -134,9 +134,20 @@ class SankhyaToParquetPipeline:
             response = self.s3_client.get_object(Bucket=BUCKET_NAME, Key=s3_key)
             df_existente = pd.read_parquet(io.BytesIO(response['Body'].read()), columns=[col_controle])
             if not df_existente.empty:
-                # Como salvamos como String, precisamos converter de volta para data para pegar o MAX real
+                # Tentamos converter para data no formato do nosso sistema
                 val_date = pd.to_datetime(df_existente[col_controle], format='%d%m%Y %H:%M:%S', errors='coerce')
-                validos = val_date.dropna()
+                validos_date = val_date.dropna()
+                if not validos_date.empty:
+                    return validos_date.max()
+                
+                # Se não for data (tudo NaT), tentamos pegar o max numérico
+                val_num = pd.to_numeric(df_existente[col_controle], errors='coerce')
+                validos_num = val_num.dropna()
+                if not validos_num.empty:
+                    return validos_num.max()
+                
+                # Fallback genérico
+                validos = df_existente[col_controle].dropna()
                 return validos.max() if not validos.empty else None
         except ClientError:
             return None
@@ -160,13 +171,17 @@ class SankhyaToParquetPipeline:
         tipo_carga = "FULL"
         if col_controle and max_val is not None and not pd.isna(max_val):
             tipo_carga = "INCREMENTAL"
-            # O Sankhya/Oracle espera TO_DATE para filtros precisos
-            ts_str = max_val.strftime('%d/%m/%Y %H:%M:%S')
-            filtro = f"{col_controle} > TO_DATE('{ts_str}', 'DD/MM/YYYY HH24:MI:SS')"
+            if isinstance(max_val, pd.Timestamp) or isinstance(max_val, datetime):
+                # O Sankhya/Oracle espera TO_DATE para filtros precisos
+                ts_str = max_val.strftime('%d/%m/%Y %H:%M:%S')
+                filtro = f"{col_controle} > TO_DATE('{ts_str}', 'DD/MM/YYYY HH24:MI:SS')"
+                log_step("⚖️", f"Modo Incremental detectado (Data). Buscando desde: {ts_str}")
+            else:
+                filtro = f"{col_controle} > {max_val}"
+                log_step("⚖️", f"Modo Incremental detectado (Numérico). Buscando desde: {max_val}")
                 
             conector = "AND" if "WHERE" in sql_base.upper() else "WHERE"
-            sql_query = f"SELECT * FROM ({sql_base}) {conector} {filtro}"
-            log_step("⚖️", f"Modo Incremental detectado. Buscando desde: {ts_str}")
+            sql_query = f"{sql_base} {conector} {filtro}"
         else:
             log_step("📤", "Modo Carga Total (Full Load).")
 
