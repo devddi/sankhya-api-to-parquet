@@ -256,44 +256,52 @@ class SankhyaToParquetPipeline:
 
 # --- CONFIGURAÇÃO DAS TAREFAS ---
 TAREFAS = [
-    {"sql": "SELECT * FROM VW_LIBERACAO_PEDIDOS where numcontrato is not null and usuario <> 'CAMILA.RIPARDO'", "path": "bronze/liberacao_pedidos.parquet"},
-    {"sql": "SELECT * FROM VW_CONTAS_A_PAGAR", "path": "bronze/contas_a_pagar.parquet"},
-    {"sql": "SELECT * FROM VW_CONSUMO_NIVEL_V2", "path": "bronze/consumo_contratos_resumo.parquet"},
-    {"sql": "SELECT * FROM VW_CONTAS_A_RECEBER", "path": "bronze/contas-a-receber.parquet"},
-    {"sql": "SELECT * FROM VW_COMPRAS_NOTAS_FISCAIS", "path": "bronze/solicitacoes_compras_nf.parquet"},
-    {"sql": "SELECT * FROM VW_FATO_PLANEJAMENTO", "path": "bronze/consumo_contratos_planejamento.parquet"},
-    {"sql": "SELECT * FROM VW_DIM_CONTRATO", "path": "bronze/consumo_contratos_base.parquet"},
-    {"sql": "SELECT * FROM VW_AUDITORIA_LANCAMENTOS", "path": "bronze/auditoria_lancamentos.parquet"},
-    {"sql": "SELECT * FROM VW_DFC_CONSOLIDADA_REDUZIDA", "path": "bronze/dfc_consolidada_reduzida.parquet"},
-    {"sql": "SELECT * FROM VW_FATO_COMPRAS_PEDIDOS where cod_pedido is not null", "path": "bronze/fato_pedidos_compras.parquet"},
-    {"sql": "SELECT * FROM VW_DIM_COMPRAS_SOLICITACOES", "path": "bronze/dim_solicitacoes_compras.parquet"},
+    {"sql": "SELECT * FROM VW_FATO_CONSUMO where id_chave is not null", "path": "bronze/consumo_contratos_financeiro.parquet"}, #Consumo dos contratos
+    {"sql": "SELECT * FROM VW_LIBERACAO_PEDIDOS where numcontrato is not null and usuario <> 'CAMILA.RIPARDO'", "path": "bronze/liberacao_pedidos.parquet"}, #Consumo dos contratos
+    {"sql": "SELECT * FROM VW_FATO_PLANEJAMENTO", "path": "bronze/consumo_contratos_planejamento.parquet"}, #Consumo dos contratos
+    {"sql": "SELECT * FROM VW_DIM_CONTRATO", "path": "bronze/consumo_contratos_base.parquet"}, #Consumo dos contratos
+    {"sql": "SELECT * FROM VW_AUDITORIA_LANCAMENTOS", "path": "bronze/auditoria_lancamentos.parquet"}, #Consumo dos contratos
+    {"sql": "SELECT * FROM VW_CONSUMO_NIVEL_V2", "path": "bronze/consumo_contratos_resumo.parquet"}, #Consumo dos contratos
+
+    {"sql": "SELECT * FROM VW_CONTAS_A_PAGAR", "path": "bronze/contas_a_pagar.parquet"}, #Financeiro
+    {"sql": "SELECT * FROM VW_CONTAS_A_RECEBER", "path": "bronze/contas-a-receber.parquet"}, #Financeiro
+    {"sql": "SELECT * FROM VW_DFC_CONSOLIDADA_REDUZIDA", "path": "bronze/dfc_consolidada_reduzida.parquet"}, #Financeiro
+    {"sql": "SELECT * FROM VW_DFC_CONSOLIDADA_FINAL", "path": "bronze/dfc_consolidada_final.parquet"}, #Financeiro
+
+    {"sql": "SELECT * FROM VW_FORNECEDOR_RUBRICA", "path": "bronze/rubricas_fornecedor.parquet"}, #Compras
+    {"sql": "SELECT * FROM VW_COMPRAS_NOTAS_FISCAIS", "path": "bronze/solicitacoes_compras_nf.parquet"}, #Compras
+    {"sql": "SELECT * FROM VW_DIM_COMPRAS_SOLICITACOES", "path": "bronze/dim_solicitacoes_compras.parquet"}, #Compras
+    {"sql": "SELECT * FROM VW_FATO_COMPRAS_PEDIDOS where cod_pedido is not null", "path": "bronze/fato_pedidos_compras.parquet"}, #Compras
+    {"sql": "SELECT * FROM VW_SOLICITACOES_ITENS_FULL", "path": "bronze/itens_solicitacoes_compras.parquet"}, #Compras
+    {"sql": "SELECT * FROM VW_COMPRAS_POR_ITEM", "path": "bronze/compras_por_item.parquet"}, #Compras
+    {"sql": "SELECT * FROM VW_ITENS_COTACAO", "path": "bronze/itens_cotacao.parquet"} #Compras
 
     # INCREMENTAIS
-    {
-        "sql": "SELECT * FROM VW_DFC_CONSOLIDADA_FINAL", 
-        "path": "bronze/dfc_consolidada_final.parquet",
-        "col_controle": "DATA", "pk": None
-    },
-    {
-        "sql": "SELECT * FROM VW_COMPRAS_POR_ITEM", 
-        "path": "bronze/compras_por_item.parquet",
-        "col_controle": "DATA_NEG", "pk": None
-    },
-    {
-        "sql": "SELECT * FROM VW_SOLICITACOES_ITENS_FULL", 
-        "path": "bronze/itens_solicitacoes_compras.parquet",
-        "col_controle": "COD_DOCUMENTO", "pk": "COD_DOCUMENTO"
-    },
-    {
-        "sql": "SELECT * FROM VW_FATO_CONSUMO where id_chave is not null ", 
-        "path": "bronze/consumo_contratos_financeiro.parquet",
-        "col_controle": "NUFIN", "pk": "NUFIN"
-    },
-    {
-        "sql": "SELECT * FROM VW_ITENS_COTACAO", 
-        "path": "bronze/itens_cotacao.parquet",
-        "col_controle": "NUMCOTACAO", "pk": "NUMCOTACAO"
-    }
+    # {
+    #     "sql": "SELECT * FROM VW_DFC_CONSOLIDADA_FINAL", 
+    #     "path": "bronze/dfc_consolidada_final.parquet",
+    #     "col_controle": "DATA", "pk": None
+    # },
+    # {
+    #     "sql": "SELECT * FROM VW_COMPRAS_POR_ITEM", 
+    #     "path": "bronze/compras_por_item.parquet",
+    #     "col_controle": "DATA_NEG", "pk": None
+    # },
+    # {
+    #     "sql": "SELECT * FROM VW_SOLICITACOES_ITENS_FULL", 
+    #     "path": "bronze/itens_solicitacoes_compras.parquet",
+    #     "col_controle": "COD_DOCUMENTO", "pk": "COD_DOCUMENTO"
+    # },
+    # {
+    #     "sql": "SELECT * FROM VW_FATO_CONSUMO where id_chave is not null ", 
+    #     "path": "bronze/consumo_contratos_financeiro.parquet",
+    #     "col_controle": "NUFIN", "pk": "NUFIN"
+    # },
+    # {
+    #     "sql": "SELECT * FROM VW_ITENS_COTACAO", 
+    #     "path": "bronze/itens_cotacao.parquet",
+    #     "col_controle": "NUMCOTACAO", "pk": "NUMCOTACAO"
+    # }
 ]
 
 if __name__ == "__main__":
@@ -313,4 +321,4 @@ if __name__ == "__main__":
             logger.error(f"❌ FALHA CRÍTICA na tarefa {t['path']}: {str(e)}")
             
     end_time = datetime.now()
-    pipeline.print_summary(end_time - start_time)
+    pipeline.print_summary(end_time - start_time)
