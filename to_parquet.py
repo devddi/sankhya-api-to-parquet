@@ -267,6 +267,7 @@ TAREFAS = [
     {"sql": "SELECT * FROM VW_CONTAS_A_RECEBER", "path": "bronze/contas-a-receber.parquet"}, #Financeiro
     {"sql": "SELECT * FROM VW_DFC_CONSOLIDADA_REDUZIDA", "path": "bronze/dfc_consolidada_reduzida.parquet"}, #Financeiro
     {"sql": "SELECT * FROM VW_DFC_CONSOLIDADA_FINAL", "path": "bronze/dfc_consolidada_final.parquet"}, #Financeiro
+    {"sql": "SELECT * FROM VW_PRESTACAO_CONTAS_FIN", "path": "bronze/prestacao_contas_fin.parquet"}, #Financeiro
 
     {"sql": "SELECT * FROM VW_FORNECEDOR_RUBRICA", "path": "bronze/rubricas_fornecedor.parquet"}, #Compras
     {"sql": "SELECT * FROM VW_COMPRAS_NOTAS_FISCAIS", "path": "bronze/solicitacoes_compras_nf.parquet"}, #Compras
