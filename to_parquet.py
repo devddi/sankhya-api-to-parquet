@@ -263,6 +263,7 @@ TAREFAS = [
     {"sql": "SELECT * FROM VW_AUDITORIA_LANCAMENTOS", "path": "bronze/auditoria_lancamentos.parquet"}, #Consumo dos contratos
     {"sql": "SELECT * FROM VW_CONSUMO_NIVEL_V2", "path": "bronze/consumo_contratos_resumo.parquet"}, #Consumo dos contratos
 
+    {"sql": "SELECT * FROM VW_MOVIMENTO_BANCARIO", "path": "bronze/movimento_bancario.parquet"}, #Financeiro
     {"sql": "SELECT * FROM VW_CONTAS_A_PAGAR", "path": "bronze/contas_a_pagar.parquet"}, #Financeiro
     {"sql": "SELECT * FROM VW_CONTAS_A_RECEBER", "path": "bronze/contas-a-receber.parquet"}, #Financeiro
     {"sql": "SELECT * FROM VW_DFC_CONSOLIDADA_REDUZIDA", "path": "bronze/dfc_consolidada_reduzida.parquet"}, #Financeiro
