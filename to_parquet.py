@@ -32,9 +32,9 @@ BUCKET_NAME = os.getenv("AWS_BUCKET_NAME", "pluralmed-data-platform")
 AWS_REGION = os.getenv("AWS_REGION", "us-east-2")
 
 # Configurações de Execução
-PAGE_SIZE = int(os.getenv("PAGE_SIZE", "2000"))
+PAGE_SIZE = int(os.getenv("PAGE_SIZE", "5000"))
 MAX_PAGES = int(os.getenv("MAX_PAGES", "5000"))
-SLEEP_BETWEEN = int(os.getenv("SLEEP_BETWEEN", "30"))
+SLEEP_BETWEEN = int(os.getenv("SLEEP_BETWEEN", "10"))
 MAX_RETRIES = int(os.getenv("MAX_RETRIES", "20"))
 
 class SankhyaToParquetPipeline:
