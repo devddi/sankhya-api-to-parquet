@@ -256,6 +256,7 @@ class SankhyaToParquetPipeline:
 
 # --- CONFIGURAÇÃO DAS TAREFAS ---
 TAREFAS = [
+    {"sql": "SELECT * FROM VW_FINANCEIRO_EMENDA", "path": "bronze/financeiro_emenda.parquet"}, #Financeiro - Manus
     {"sql": "SELECT * FROM VW_CONSUMO_NIVEL_V3", "path": "bronze/consumo_nivel_v3.parquet"}, #Financeiro - Manus
     {"sql": "SELECT * FROM VW_RECEITAS_GERAL", "path": "bronze/receitas_geral.parquet"}, #Financeiro - Manus
     {"sql": "SELECT * FROM VW_DESPESAS_GERAL_V2", "path": "bronze/despesas_geral_v2.parquet"}, #Financeiro - Manus
